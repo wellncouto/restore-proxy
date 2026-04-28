@@ -55,8 +55,15 @@ def add_watermark(
     watermark_text: str = "AMOSTRA",
     footer_text: str = "Pague o PIX para receber a foto sem marca d'água em alta qualidade",
     brand_text: str = "",
+    max_size: int = 720,
+    jpeg_quality: int = 70,
 ) -> bytes:
     img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+
+    # Reduz pra preview (incentiva pagar pelo HD)
+    if max_size and max(img.size) > max_size:
+        img.thumbnail((max_size, max_size), Image.LANCZOS)
+
     w, h = img.size
 
     # Diagonal repeated watermark
@@ -127,7 +134,7 @@ def add_watermark(
     final.paste(banner.convert("RGB"), (0, top_h + h))
 
     out = io.BytesIO()
-    final.save(out, format="JPEG", quality=85, optimize=True)
+    final.save(out, format="JPEG", quality=jpeg_quality, optimize=True)
     return out.getvalue()
 
 
@@ -138,6 +145,8 @@ class WatermarkIn(BaseModel):
         "Pague o PIX para receber a foto sem marca d'água em alta qualidade"
     )
     brand_text: Optional[str] = ""
+    max_size: Optional[int] = 720
+    jpeg_quality: Optional[int] = 70
 
 
 class WatermarkOut(BaseModel):
@@ -162,6 +171,8 @@ def watermark(body: WatermarkIn):
         watermark_text=body.watermark_text or "AMOSTRA",
         footer_text=body.footer_text or "",
         brand_text=body.brand_text or "",
+        max_size=body.max_size or 720,
+        jpeg_quality=body.jpeg_quality or 70,
     )
     return WatermarkOut(image_b64=base64.b64encode(out_bytes).decode("ascii"))
 
