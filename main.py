@@ -27,6 +27,10 @@ DEFAULT_UPSCALE_MODEL = os.getenv("UPSCALE_MODEL", "SRVGG, realesr-general-x4v3.
 DEFAULT_SCALE = float(os.getenv("SCALE", "2"))
 GRAYSCALE_THRESHOLD = float(os.getenv("GRAYSCALE_THRESHOLD", "8"))  # avg channel diff
 
+# Gemini (Nano Banana)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-image")
+
 app = FastAPI(title="Restore Proxy", version="2.1")
 
 
@@ -377,6 +381,118 @@ def restore(body: RestoreIn):
             os.unlink(in_path)
         except Exception:
             pass
+
+
+# ───────── Gemini (Nano Banana) ─────────
+
+DEFAULT_GEMINI_PROMPT = (
+    "Restore and naturally colorize this old damaged photograph. "
+    "Repair scratches, tears, stains, dust, fading and discoloration. "
+    "If black and white or sepia, colorize with realistic period-accurate skin tones, "
+    "eye colors, hair, clothing and background colors. "
+    "Sharpen all details and improve overall quality dramatically. "
+    "Keep the EXACT SAME people, faces, identities, expressions, clothing patterns, "
+    "body postures, background composition and pose — do NOT change who they are or "
+    "add/remove anything. Output a high quality professionally restored version of "
+    "the original photo."
+)
+
+
+class GeminiIn(BaseModel):
+    image_b64: str
+    prompt: Optional[str] = None
+    model: Optional[str] = None
+
+
+class GeminiOut(BaseModel):
+    image_b64: str
+    mime_type: str
+    duration_s: float
+    model: str
+
+
+@app.post("/restore-gemini", response_model=GeminiOut)
+def restore_gemini(body: GeminiIn):
+    if not GEMINI_API_KEY:
+        raise HTTPException(500, "GEMINI_API_KEY não configurada no ambiente")
+
+    raw = body.image_b64
+    if "," in raw and raw.lstrip().startswith("data:"):
+        raw = raw.split(",", 1)[1]
+    try:
+        img_bytes = base64.b64decode(raw)
+    except Exception as e:
+        raise HTTPException(400, f"image_b64 inválido: {e}")
+    if len(img_bytes) < 1024:
+        raise HTTPException(400, "imagem muito pequena")
+
+    # Detecta mime
+    try:
+        img = Image.open(io.BytesIO(img_bytes))
+        fmt = (img.format or "JPEG").upper()
+        in_mime = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}.get(fmt, "image/jpeg")
+    except Exception:
+        in_mime = "image/jpeg"
+
+    model = body.model or GEMINI_MODEL
+    prompt = body.prompt or DEFAULT_GEMINI_PROMPT
+    in_b64 = base64.b64encode(img_bytes).decode("ascii")
+
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {"inlineData": {"mimeType": in_mime, "data": in_b64}}
+            ]
+        }],
+        "generationConfig": {
+            "responseModalities": ["IMAGE"]
+        }
+    }
+
+    import httpx
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    log.info("gemini call model=%s in_size=%dKB", model, len(img_bytes) // 1024)
+    t0 = time.time()
+    try:
+        with httpx.Client(timeout=180) as h:
+            r = h.post(
+                url,
+                headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                json=payload,
+            )
+            r.raise_for_status()
+            data = r.json()
+    except httpx.HTTPStatusError as e:
+        body_text = e.response.text[:600] if e.response is not None else ""
+        raise HTTPException(502, f"gemini HTTP {e.response.status_code}: {body_text}")
+    except Exception as e:
+        raise HTTPException(502, f"gemini falha: {e}")
+
+    duration = time.time() - t0
+
+    # Extrai imagem do retorno
+    candidates = data.get("candidates", [])
+    if not candidates:
+        raise HTTPException(502, f"gemini sem candidates: {str(data)[:400]}")
+    parts = candidates[0].get("content", {}).get("parts", [])
+    out_b64 = None
+    out_mime = "image/png"
+    for p in parts:
+        inline = p.get("inlineData") or p.get("inline_data")
+        if inline and inline.get("data"):
+            out_b64 = inline["data"]
+            out_mime = inline.get("mimeType") or inline.get("mime_type") or "image/png"
+            break
+    if not out_b64:
+        raise HTTPException(502, f"gemini não retornou imagem: {str(data)[:400]}")
+
+    return GeminiOut(
+        image_b64=out_b64,
+        mime_type=out_mime,
+        duration_s=round(duration, 2),
+        model=model,
+    )
 
 
 if __name__ == "__main__":
