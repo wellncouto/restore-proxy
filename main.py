@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from gradio_client import Client, handle_file
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("restore-proxy")
@@ -27,7 +27,143 @@ DEFAULT_UPSCALE_MODEL = os.getenv("UPSCALE_MODEL", "SRVGG, realesr-general-x4v3.
 DEFAULT_SCALE = float(os.getenv("SCALE", "2"))
 GRAYSCALE_THRESHOLD = float(os.getenv("GRAYSCALE_THRESHOLD", "8"))  # avg channel diff
 
-app = FastAPI(title="Restore Proxy", version="2.0")
+app = FastAPI(title="Restore Proxy", version="2.1")
+
+
+# ───────── Watermark ─────────
+
+FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+]
+
+
+def _load_font(size: int) -> ImageFont.FreeTypeFont:
+    for path in FONT_CANDIDATES:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
+
+def add_watermark(
+    img_bytes: bytes,
+    watermark_text: str = "AMOSTRA",
+    footer_text: str = "Pague o PIX para receber a foto sem marca d'água em alta qualidade",
+    brand_text: str = "",
+) -> bytes:
+    img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+    w, h = img.size
+
+    # Diagonal repeated watermark
+    diag_w, diag_h = int(w * 1.5), int(h * 1.5)
+    overlay = Image.new("RGBA", (diag_w, diag_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    font_size = max(36, w // 14)
+    font = _load_font(font_size)
+
+    bbox = draw.textbbox((0, 0), watermark_text, font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+
+    spacing_x = max(text_w + w // 10, w // 4)
+    spacing_y = max(text_h + h // 8, h // 4)
+
+    for y in range(0, diag_h, spacing_y):
+        offset = (y // spacing_y) % 2 * (spacing_x // 2)
+        for x in range(-spacing_x, diag_w, spacing_x):
+            draw.text((x + offset, y), watermark_text, fill=(255, 255, 255, 110), font=font)
+            draw.text(
+                (x + offset + 2, y + 2), watermark_text, fill=(0, 0, 0, 80), font=font
+            )
+
+    overlay = overlay.rotate(-30, resample=Image.BICUBIC, expand=False)
+    crop_x = (diag_w - w) // 2
+    crop_y = (diag_h - h) // 2
+    overlay = overlay.crop((crop_x, crop_y, crop_x + w, crop_y + h))
+
+    img_with_wm = Image.alpha_composite(img, overlay)
+
+    # Footer banner
+    banner_h = max(60, h // 10)
+    banner = Image.new("RGBA", (w, banner_h), (15, 23, 42, 235))
+    banner_draw = ImageDraw.Draw(banner)
+    footer_font = _load_font(max(18, banner_h // 3))
+
+    bbox = banner_draw.textbbox((0, 0), footer_text, font=footer_font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+    # auto-shrink se não couber
+    while tw > w * 0.92 and footer_font.size > 14:
+        new_size = footer_font.size - 2
+        footer_font = _load_font(new_size)
+        bbox = banner_draw.textbbox((0, 0), footer_text, font=footer_font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+    banner_draw.text(((w - tw) // 2, (banner_h - th) // 2 - 2), footer_text,
+                     fill=(255, 255, 255, 255), font=footer_font)
+
+    # Top brand bar (opcional)
+    top_h = 0
+    if brand_text:
+        top_h = max(50, h // 14)
+        top_bar = Image.new("RGBA", (w, top_h), (15, 23, 42, 235))
+        td = ImageDraw.Draw(top_bar)
+        brand_font = _load_font(max(20, top_h // 2))
+        bb = td.textbbox((0, 0), brand_text, font=brand_font)
+        bw, bh = bb[2] - bb[0], bb[3] - bb[1]
+        td.text(((w - bw) // 2, (top_h - bh) // 2 - 2), brand_text,
+                fill=(255, 255, 255, 255), font=brand_font)
+
+    final_h = h + banner_h + top_h
+    final = Image.new("RGB", (w, final_h), (15, 23, 42))
+    if top_h:
+        final.paste(top_bar.convert("RGB"), (0, 0))
+    final.paste(img_with_wm.convert("RGB"), (0, top_h))
+    final.paste(banner.convert("RGB"), (0, top_h + h))
+
+    out = io.BytesIO()
+    final.save(out, format="JPEG", quality=85, optimize=True)
+    return out.getvalue()
+
+
+class WatermarkIn(BaseModel):
+    image_b64: str
+    watermark_text: Optional[str] = "AMOSTRA"
+    footer_text: Optional[str] = (
+        "Pague o PIX para receber a foto sem marca d'água em alta qualidade"
+    )
+    brand_text: Optional[str] = ""
+
+
+class WatermarkOut(BaseModel):
+    image_b64: str
+    mime_type: str = "image/jpeg"
+
+
+@app.post("/watermark", response_model=WatermarkOut)
+def watermark(body: WatermarkIn):
+    raw = body.image_b64
+    if "," in raw and raw.lstrip().startswith("data:"):
+        raw = raw.split(",", 1)[1]
+    try:
+        img_bytes = base64.b64decode(raw)
+    except Exception as e:
+        raise HTTPException(400, f"image_b64 inválido: {e}")
+    if len(img_bytes) < 1024:
+        raise HTTPException(400, "imagem muito pequena")
+
+    out_bytes = add_watermark(
+        img_bytes,
+        watermark_text=body.watermark_text or "AMOSTRA",
+        footer_text=body.footer_text or "",
+        brand_text=body.brand_text or "",
+    )
+    return WatermarkOut(image_b64=base64.b64encode(out_bytes).decode("ascii"))
 
 _restore_client: Optional[Client] = None
 _colorize_client: Optional[Client] = None
