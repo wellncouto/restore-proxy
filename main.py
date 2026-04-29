@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from gradio_client import Client, handle_file
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("restore-proxy")
@@ -62,7 +62,10 @@ def add_watermark(
     max_size: int = 720,
     jpeg_quality: int = 70,
 ) -> bytes:
-    img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+    img = Image.open(io.BytesIO(img_bytes))
+    # Aplica rotação baseada em EXIF (corrige fotos retrato que viriam deitadas)
+    img = ImageOps.exif_transpose(img)
+    img = img.convert("RGBA")
 
     # Reduz pra preview (incentiva pagar pelo HD)
     if max_size and max(img.size) > max_size:
