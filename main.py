@@ -33,6 +33,14 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-image")
 
 app = FastAPI(title="Restore Proxy", version="2.1")
 
+# Inclui módulo do produto Álbum Pra Colorir
+try:
+    from colorir import router as colorir_router
+    app.include_router(colorir_router)
+    log.info("colorir router registrado")
+except Exception as e:
+    log.warning(f"colorir router não carregado: {e}")
+
 
 # ───────── Watermark ─────────
 
@@ -495,6 +503,56 @@ def restore_gemini(body: GeminiIn):
         mime_type=out_mime,
         duration_s=round(duration, 2),
         model=model,
+    )
+
+
+# ───────── Rotate Fix (EXIF) ─────────
+
+class RotateFixIn(BaseModel):
+    image_b64: str
+    output_format: Optional[str] = "jpeg"   # jpeg | png
+    output_quality: Optional[int] = 95
+
+
+class RotateFixOut(BaseModel):
+    image_b64: str
+    mime_type: str
+    width: int
+    height: int
+
+
+@app.post("/rotate-fix", response_model=RotateFixOut)
+def rotate_fix(body: RotateFixIn):
+    raw = body.image_b64
+    if "," in raw and raw.lstrip().startswith("data:"):
+        raw = raw.split(",", 1)[1]
+    try:
+        img_bytes = base64.b64decode(raw)
+    except Exception as e:
+        raise HTTPException(400, f"image_b64 inválido: {e}")
+    if len(img_bytes) < 1024:
+        raise HTTPException(400, "imagem muito pequena")
+
+    img = Image.open(io.BytesIO(img_bytes))
+    img = ImageOps.exif_transpose(img)
+
+    fmt = (body.output_format or "jpeg").lower()
+    if fmt == "png":
+        img = img.convert("RGBA")
+        out = io.BytesIO()
+        img.save(out, format="PNG", optimize=True)
+        mime = "image/png"
+    else:
+        img = img.convert("RGB")
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=body.output_quality or 95, optimize=True)
+        mime = "image/jpeg"
+
+    return RotateFixOut(
+        image_b64=base64.b64encode(out.getvalue()).decode("ascii"),
+        mime_type=mime,
+        width=img.width,
+        height=img.height,
     )
 
 

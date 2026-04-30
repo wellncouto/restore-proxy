@@ -14,7 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py .
+COPY main.py colorir.py ./
+
+# storage persistente pros álbuns (montar volume aqui no Easypanel)
+RUN mkdir -p /data/colorir
+VOLUME ["/data/colorir"]
 
 EXPOSE 8000
 
