@@ -33,6 +33,16 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-image")
 
 app = FastAPI(title="Restore Proxy", version="2.1")
 
+# CORS pra frontend Next.js (dev local + produção)
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Inclui módulo do produto Álbum Pra Colorir
 try:
     from colorir import router as colorir_router
