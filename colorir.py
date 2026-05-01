@@ -412,6 +412,60 @@ async def upload_foto(
     return {"ok": True, "posicao": posicao}
 
 
+@router.get("/album/{token}/foto/{posicao}")
+def get_foto(token: str, posicao: int):
+    """Serve a foto original (PNG normalizado) — pra mostrar thumb após reload."""
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT f.original_path
+                  FROM colorir.fotos f
+                  JOIN colorir.albuns a ON a.id = f.album_id
+                 WHERE a.token = %s AND f.posicao = %s
+                """,
+                (token, posicao),
+            )
+            row = cur.fetchone()
+    if not row or not row["original_path"]:
+        raise HTTPException(404, "foto não encontrada")
+    p = Path(row["original_path"])
+    if not p.exists():
+        raise HTTPException(404, "arquivo não existe mais")
+    return FileResponse(p, media_type="image/png")
+
+
+@router.delete("/album/{token}/foto/{posicao}")
+def delete_foto(token: str, posicao: int):
+    """Remove uma foto (libera slot pra reupload)."""
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT f.id, f.original_path, f.processada_path, a.id AS album_id, a.status
+                  FROM colorir.fotos f
+                  JOIN colorir.albuns a ON a.id = f.album_id
+                 WHERE a.token = %s AND f.posicao = %s
+                """,
+                (token, posicao),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(404, "foto não encontrada")
+            if row["status"] in ("PAGO", "PROCESSANDO", "PREVIEW"):
+                raise HTTPException(409, f"álbum em estado {row['status']} — não pode editar")
+            cur.execute("DELETE FROM colorir.fotos WHERE id=%s", (row["id"],))
+            for path_field in (row["original_path"], row["processada_path"]):
+                if path_field:
+                    try:
+                        Path(path_field).unlink(missing_ok=True)
+                    except Exception as e:
+                        log.warning(f"falha apagar {path_field}: {e}")
+
+    _record_event(row["album_id"], None, "FOTO_DELETED", {"posicao": posicao})
+    return {"ok": True, "posicao": posicao}
+
+
 @router.get("/album/{token}/status", response_model=StatusOut)
 def status_album(token: str):
     with db_conn() as conn:
