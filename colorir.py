@@ -443,11 +443,31 @@ def _process_album_background(album_id: int, token: str):
             _record_event(album_id, album["phone"], "PROCESSAMENTO_FALHOU", {})
             return
 
+        # Re-fetch fotos do DB pra pegar processada_path/status atualizados
+        with db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM colorir.fotos WHERE album_id = %s ORDER BY posicao",
+                    (album_id,),
+                )
+                fotos_fresh = cur.fetchall()
+
         # Monta PDFs (preview com watermark + final clean)
         pdf_preview = adir / "pdfs" / "preview.pdf"
         pdf_final = adir / "pdfs" / "final.pdf"
-        _build_pdf(album, fotos, str(pdf_preview), with_watermark=True)
-        _build_pdf(album, fotos, str(pdf_final), with_watermark=False)
+        try:
+            _build_pdf(album, fotos_fresh, str(pdf_preview), with_watermark=True)
+            _build_pdf(album, fotos_fresh, str(pdf_final), with_watermark=False)
+        except Exception as e:
+            log.exception(f"[{token}] erro montar PDF")
+            with db_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE colorir.albuns SET status='CANCELADO', observacao=%s WHERE id=%s",
+                        (f"Erro PDF: {str(e)[:300]}", album_id),
+                    )
+            _record_event(album_id, album["phone"], "PDF_FALHOU", {"erro": str(e)[:500]})
+            return
 
         with db_conn() as conn:
             with conn.cursor() as cur:
@@ -467,6 +487,16 @@ def _process_album_background(album_id: int, token: str):
         log.info(f"[{token}] preview pronto: {pdf_preview}")
     except Exception as e:
         log.exception(f"[{token}] erro processamento álbum")
+        # marca como CANCELADO pra desbloquear novo álbum
+        try:
+            with db_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE colorir.albuns SET status='CANCELADO', observacao=%s WHERE id=%s",
+                        (f"Erro fatal: {str(e)[:300]}", album_id),
+                    )
+        except Exception:
+            pass
         _record_event(album_id, None, "PROCESSAMENTO_ERRO", {"erro": str(e)[:500]})
 
 
