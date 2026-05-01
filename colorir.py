@@ -45,6 +45,8 @@ STORAGE_ROOT = Path(os.getenv("COLORIR_STORAGE_PATH", "/data/colorir"))
 TOKEN_SECRET = os.getenv("COLORIR_TOKEN_SECRET", "change-me-in-prod")
 OPENAI_KEY = os.getenv("COLORIR_OPENAI_KEY", os.getenv("OPENAI_API_KEY", ""))
 BASE_URL = os.getenv("COLORIR_BASE_URL", "https://colorir.example.com")
+PIX_CHAVE = os.getenv("COLORIR_PIX_CHAVE", "e58e968f-2c38-43a4-b094-5ecf0eefd21a")
+WHATSAPP_NUM = os.getenv("COLORIR_WHATSAPP_NUM", "5547991100824")
 
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
 OPENAI_MODEL = "gpt-image-2"
@@ -238,6 +240,8 @@ class StatusOut(BaseModel):
     pdf_preview_url: Optional[str]
     pdf_final_url: Optional[str]
     fotos: list
+    pix_chave: str
+    whatsapp_url: str
 
 
 class ProcessarAlbumIn(BaseModel):
@@ -479,6 +483,10 @@ def status_album(token: str):
                 (album["id"],),
             )
             fotos = cur.fetchall()
+    valor_str = f"R$ {album['valor_centavos']/100:.2f}".replace(".", ",")
+    wa_msg = f"Já fiz o pix de {valor_str}, segue comprovante 📎"
+    import urllib.parse
+    wa_url = f"https://wa.me/{WHATSAPP_NUM}?text={urllib.parse.quote(wa_msg)}"
     return StatusOut(
         token=album["token"],
         status=album["status"],
@@ -490,6 +498,8 @@ def status_album(token: str):
         pdf_preview_url=album["pdf_preview_url"],
         pdf_final_url=album["pdf_final_url"],
         fotos=[dict(f) for f in fotos],
+        pix_chave=PIX_CHAVE,
+        whatsapp_url=wa_url,
     )
 
 
@@ -816,6 +826,62 @@ def get_preview(token: str):
     if not row or not row["pdf_preview_url"]:
         raise HTTPException(404, "preview não disponível")
     return FileResponse(row["pdf_preview_url"], media_type="application/pdf", filename="preview.pdf")
+
+
+@router.get("/album/{token}/preview-image")
+def get_preview_image(token: str):
+    """Renderiza a capa preview como PNG (com watermark) — funciona em qualquer browser
+    que não consegue renderizar iframe PDF (iOS Safari antigo, etc)."""
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM colorir.albuns WHERE token=%s", (token,))
+            album = cur.fetchone()
+            if not album or album["status"] not in ("PREVIEW",):
+                raise HTTPException(404, "preview não disponível")
+            cur.execute(
+                "SELECT * FROM colorir.fotos WHERE album_id=%s AND eh_capa=true LIMIT 1",
+                (album["id"],),
+            )
+            capa = cur.fetchone()
+
+    # Se não tem capa, usa primeira página processada
+    pic_path = None
+    if capa and capa["processada_path"]:
+        pic_path = capa["processada_path"]
+    else:
+        with db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT processada_path FROM colorir.fotos WHERE album_id=%s AND status='OK' ORDER BY posicao LIMIT 1",
+                    (album["id"],),
+                )
+                r = cur.fetchone()
+                if r:
+                    pic_path = r["processada_path"]
+
+    if not pic_path:
+        raise HTTPException(404, "imagem não encontrada")
+
+    img = Image.open(pic_path).convert("RGB")
+    if capa and capa["eh_capa"]:
+        # capa Pixar — compõe como capa do livro
+        page = _build_capa_page(album, img)
+    else:
+        # se for miolo, usa direto
+        page = _build_miolo_page(img, with_border=True)
+    page = _apply_watermark(page, valor=album["valor_centavos"])
+
+    # Reduz tamanho pra browser carregar rápido (1200px largura ~suficiente pra preview)
+    if page.width > 1200:
+        ratio = 1200 / page.width
+        page = page.resize((1200, int(page.height * ratio)), Image.LANCZOS)
+
+    buf = io.BytesIO()
+    page.save(buf, "JPEG", quality=85, optimize=True)
+    buf.seek(0)
+
+    from fastapi.responses import Response
+    return Response(content=buf.getvalue(), media_type="image/jpeg")
 
 
 @router.post("/album/{token}/liberar")
