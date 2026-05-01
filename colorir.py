@@ -58,13 +58,15 @@ PROCESS_PARALLEL = 4                 # quantas chamadas IA simultâneas
 
 # Prompts
 PROMPT_COLORIR = (
-    "Convert this photo into a children's coloring book page in PORTRAIT orientation (vertical A4 page). "
-    "Use thick clean black outlines on a pure white background. Cartoon style, exaggerated friendly cute "
-    "features, big eyes, simplified shapes — like a Disney/kawaii children illustration. Remove all colors, "
-    "shading and gradients. The main subjects should be centered in the upper portion. ADD a fun playful "
-    "childish background filling the rest of the page with flowers, butterflies, hearts, stars, balloons, "
-    "clouds and simple cartoon scenery, all as line art only. Compose to fill the entire vertical A4 page "
-    "nicely. No text, no signature, no watermark."
+    "Convert this photo into a CHILDREN'S COLORING BOOK PAGE in PORTRAIT (vertical A4) orientation. "
+    "STRICT REQUIREMENTS: only pure black continuous vector-style outlines on PURE WHITE background. "
+    "Use UNIFORM thick (4-6 pixel) clean black stroke lines. NO cross-hatching, NO shading, NO grayscale, "
+    "NO gradients, NO textures, NO dots, NO speckles, NO sketchy strokes. Each line must be solid, "
+    "continuous and closed where possible — like a printed coloring book. "
+    "Cartoon style with cute exaggerated friendly features, big eyes, simplified shapes (Disney/kawaii feel). "
+    "Center the main subjects in the upper portion. ADD a playful childish background (flowers, butterflies, "
+    "hearts, stars, balloons, clouds, cartoon scenery) filling the rest of the A4 page, also as clean line art. "
+    "Leave generous white space inside shapes for crayons. No text, no signature, no watermark."
 )
 PROMPT_PIXAR_CAPA = (
     "Convert this photo into a vibrant 3D Pixar/Disney style colorful cartoon illustration suitable for a "
@@ -135,6 +137,59 @@ def _normalize_for_openai(raw_bytes: bytes) -> bytes:
     out = io.BytesIO()
     img.save(out, "PNG", optimize=True)
     return out.getvalue()
+
+
+def _vectorize_lineart(png_bytes: bytes, target_w: int = 2048) -> bytes:
+    """Limpa line art via potrace: bitmap ruidoso → SVG vetorial → PNG re-renderizado.
+    Resulta em linhas pretas perfeitamente lisas, sem textura ou ruído.
+    Requer 'potrace' e 'rsvg-convert' instalados no container.
+    """
+    import subprocess
+    import tempfile
+
+    img = Image.open(io.BytesIO(png_bytes)).convert("L")  # grayscale
+
+    # Threshold binário (135) — força preto e branco puro, mata cinzas/textura
+    bw = img.point(lambda p: 0 if p < 135 else 255, mode="1")
+
+    with tempfile.TemporaryDirectory() as td:
+        bmp_path = Path(td) / "input.bmp"
+        svg_path = Path(td) / "out.svg"
+        png_path = Path(td) / "out.png"
+
+        # Pillow salva 1-bit como BMP (potrace aceita)
+        bw.save(bmp_path, "BMP")
+
+        # potrace: bitmap → SVG vetorial. Parâmetros pra line art limpo:
+        # -t 5  : suaviza ruído (despeckle áreas <5px)
+        # -O 0.5: optimização do path (curvas mais suaves)
+        # -s    : output SVG
+        # -a 1.0: corner threshold suave
+        try:
+            subprocess.run(
+                ["potrace", str(bmp_path), "-s", "-t", "5", "-O", "0.5",
+                 "-a", "1.0", "-o", str(svg_path)],
+                check=True, capture_output=True, timeout=30,
+            )
+        except FileNotFoundError:
+            log.warning("potrace não instalado, retornando bitmap original")
+            return png_bytes
+        except subprocess.CalledProcessError as e:
+            log.warning(f"potrace falhou: {e.stderr.decode()[:200]}, retornando original")
+            return png_bytes
+
+        # Renderiza SVG de volta pra PNG em alta resolução via rsvg-convert
+        try:
+            subprocess.run(
+                ["rsvg-convert", "-w", str(target_w), "-b", "white",
+                 "-o", str(png_path), str(svg_path)],
+                check=True, capture_output=True, timeout=30,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError) as e:
+            log.warning(f"rsvg-convert indisponível, retornando original: {e}")
+            return png_bytes
+
+        return png_path.read_bytes()
 
 
 def _call_openai_edit(image_bytes: bytes, prompt: str, size: str = "1024x1536", quality: str = "low") -> bytes:
@@ -407,7 +462,12 @@ def _process_album_background(album_id: int, token: str):
                 src = Path(foto["original_path"]).read_bytes()
                 prompt = PROMPT_PIXAR_CAPA if eh_capa else PROMPT_COLORIR
                 size = "1024x1024" if eh_capa else "1024x1536"
-                processed = _call_openai_edit(src, prompt, size=size, quality="low")
+                # Capa fica em low (color, OK), miolo em medium (line art precisa precisão)
+                quality = "low" if eh_capa else "medium"
+                processed = _call_openai_edit(src, prompt, size=size, quality=quality)
+                # Vetoriza miolo via potrace pra linhas perfeitas (capa permanece cor original)
+                if not eh_capa:
+                    processed = _vectorize_lineart(processed, target_w=2048)
                 out_path = adir / "processed" / f"{posicao:02d}.png"
                 out_path.write_bytes(processed)
                 with db_conn() as conn:

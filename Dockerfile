@@ -6,9 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000
 
-# fonts pra marca d'água via Pillow
+# fonts pra marca d'água via Pillow + potrace/rsvg-convert pra vetorizar line art
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core \
+    potrace \
+    librsvg2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
