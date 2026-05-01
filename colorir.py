@@ -198,6 +198,64 @@ class LiberarIn(BaseModel):
 # ───────── Endpoints ─────────
 
 
+@router.get("/_debug")
+def debug():
+    """Diagnóstico: testa env + conexão DB sem expor credenciais."""
+    out = {
+        "dsn_set": bool(DB_DSN),
+        "dsn_format_ok": False,
+        "dsn_host": None,
+        "dsn_db": None,
+        "storage_root_exists": STORAGE_ROOT.exists(),
+        "storage_writable": False,
+        "openai_key_set": bool(OPENAI_KEY),
+        "openai_key_prefix": OPENAI_KEY[:8] if OPENAI_KEY else None,
+        "token_secret_set": bool(TOKEN_SECRET) and TOKEN_SECRET != "change-me-in-prod",
+        "base_url": BASE_URL,
+        "db_connect_ok": False,
+        "db_error": None,
+        "schema_colorir_exists": False,
+    }
+    try:
+        # parse DSN sem expor senha
+        from urllib.parse import urlparse
+        u = urlparse(DB_DSN)
+        out["dsn_format_ok"] = u.scheme in ("postgres", "postgresql") and bool(u.hostname) and bool(u.path)
+        out["dsn_host"] = u.hostname
+        out["dsn_db"] = u.path.lstrip("/") if u.path else None
+    except Exception as e:
+        out["db_error"] = f"dsn parse: {e}"
+        return out
+
+    try:
+        STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+        (STORAGE_ROOT / ".write_test").write_text("ok")
+        out["storage_writable"] = True
+        (STORAGE_ROOT / ".write_test").unlink(missing_ok=True)
+    except Exception as e:
+        out["db_error"] = f"storage: {e}"
+
+    try:
+        conn = psycopg2.connect(DB_DSN, connect_timeout=5)
+        out["db_connect_ok"] = True
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name='colorir'")
+            out["schema_colorir_exists"] = cur.fetchone() is not None
+        conn.close()
+    except Exception as e:
+        # mascarar qualquer ocorrência de senha (entre : e @ na DSN)
+        msg = str(e)
+        try:
+            from urllib.parse import urlparse
+            u = urlparse(DB_DSN)
+            if u.password:
+                msg = msg.replace(u.password, "***")
+        except Exception:
+            pass
+        out["db_error"] = msg[:500]
+    return out
+
+
 @router.post("/album/criar", response_model=CriarAlbumOut)
 def criar_album(body: CriarAlbumIn):
     if body.qtd_fotos not in ALLOWED_PACKS:
