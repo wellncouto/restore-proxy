@@ -47,6 +47,8 @@ OPENAI_KEY = os.getenv("COLORIR_OPENAI_KEY", os.getenv("OPENAI_API_KEY", ""))
 BASE_URL = os.getenv("COLORIR_BASE_URL", "https://colorir.example.com")
 PIX_CHAVE = os.getenv("COLORIR_PIX_CHAVE", "e58e968f-2c38-43a4-b094-5ecf0eefd21a")
 WHATSAPP_NUM = os.getenv("COLORIR_WHATSAPP_NUM", "5547991100824")
+PREVIEW_WEBHOOK = os.getenv("COLORIR_PREVIEW_WEBHOOK",
+    "http://empresarial_n8n:5678/webhook/colorir-preview-ready")
 
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
 OPENAI_MODEL = "gpt-image-2"
@@ -643,6 +645,20 @@ def _process_album_background(album_id: int, token: str):
                 )
         _record_event(album_id, album["phone"], "PREVIEW_PRONTO", {"ok_count": ok_count})
         log.info(f"[{token}] preview pronto: {pdf_preview}")
+
+        # Notifica n8n pra avisar cliente no zap
+        if PREVIEW_WEBHOOK:
+            try:
+                with httpx.Client(timeout=10.0) as cli:
+                    cli.post(PREVIEW_WEBHOOK, json={
+                        "phone": album["phone"],
+                        "token": token,
+                        "valor_centavos": album["valor_centavos"],
+                        "nome": album.get("nome") or "",
+                        "app_url": f"{BASE_URL}/{token}",
+                    })
+            except Exception as e:
+                log.warning(f"[{token}] preview webhook falhou: {e}")
     except Exception as e:
         log.exception(f"[{token}] erro processamento álbum")
         # marca como CANCELADO pra desbloquear novo álbum
