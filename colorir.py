@@ -77,8 +77,13 @@ PROMPT_COLORIR = (
 PROMPT_PIXAR_CAPA = (
     "Convert this photo into a vibrant 3D Pixar/Disney style colorful cartoon illustration suitable for a "
     "children's book cover. Friendly cute exaggerated features, big expressive eyes, bright vibrant saturated "
-    "colors, smooth shading, warm cheerful lighting. Clean simple soft background. The subjects should look "
-    "adorable and approachable. Full color, NOT line art."
+    "colors, smooth shading, warm cheerful lighting. "
+    "BACKGROUND RULE: PRESERVE the actual setting from the original photo — if it's outdoors (beach, park, "
+    "mountains), keep nature elements; if indoor (living room, kitchen, bedroom), keep furniture/walls. "
+    "DO NOT invent generic backgrounds. Stylize the real background as Pixar 3D — soft volumetric lighting, "
+    "stylized props, depth of field with bokeh. The setting should feel real but enchanted. "
+    "The subjects should look adorable and approachable, KEEPING facial features recognizable. "
+    "Full color, NOT line art."
 )
 
 A4_PX = (2480, 3508)  # 300 DPI
@@ -955,6 +960,20 @@ def get_pdf_final(token: str):
     if not row or row["status"] != "PAGO":
         raise HTTPException(403, "álbum não pago")
     return FileResponse(row["pdf_final_url"], media_type="application/pdf", filename="album.pdf")
+
+
+@router.get("/exemplo/{kind}")
+def get_exemplo(kind: str):
+    """Serve exemplos before/after/audio (configurados em /data/colorir/exemplos/).
+    kind: 'antes' | 'depois' | 'audio'"""
+    safe = {"antes": "antes.jpg", "depois": "depois.jpg", "audio": "intro.mp3"}
+    if kind not in safe:
+        raise HTTPException(404, "kind inválido")
+    p = STORAGE_ROOT / "exemplos" / safe[kind]
+    if not p.exists():
+        raise HTTPException(404, "arquivo não disponível")
+    media = "image/jpeg" if kind != "audio" else "audio/mpeg"
+    return FileResponse(p, media_type=media)
 
 
 @router.get("/historico/{phone}")
