@@ -702,22 +702,7 @@ def _build_capa_page(album: dict, pixar_img: Image.Image) -> Image.Image:
     page = Image.new("RGB", A4_PX, bg)
     d = ImageDraw.Draw(page)
 
-    # Decoração leve (estrelas e balões — versão simples)
-    import random, math
-
-    random.seed(album["id"])
-    for _ in range(20):
-        x = random.choice([random.randint(50, 350), random.randint(2130, 2430)])
-        y = random.randint(100, A4_PX[1] - 100)
-        r = random.randint(25, 55)
-        pts = []
-        for i in range(10):
-            ang = math.pi / 2 + i * math.pi / 5
-            rr = r if i % 2 == 0 else r / 2.4
-            pts.append((x + rr * math.cos(ang), y - rr * math.sin(ang)))
-        d.polygon(pts, fill=accent)
-
-    # Título topo
+    # Título topo (sem decorações)
     f_top = _font_bold(80)
     title = "MEU LIVRO PRA COLORIR"
     bbox = d.textbbox((0, 0), title, font=f_top)
