@@ -74,7 +74,19 @@ PROMPT_COLORIR = (
     "Goal: each page tells the story of where the family was. Compose to fill the entire A4 portrait nicely. "
     "Leave generous white space inside shapes for crayons. No text, no signature, no watermark."
 )
-PROMPT_PIXAR_CAPA = (
+PROMPT_CAPA_FULL_TEMPLATE = (
+    "Design a beautiful CHILDREN'S COLORING BOOK COVER in PORTRAIT A4 orientation, featuring this family "
+    "transformed into vibrant 3D Pixar/Disney style cartoon characters. The subjects must be the main visual "
+    "element, large and centered, looking adorable and joyful. PRESERVE the actual background from the photo, "
+    "stylized as Pixar 3D scene. "
+    "Add at the TOP a title that reads exactly: \"MEU LIVRO PRA COLORIR\" — chunky rounded kids font, bright "
+    "vibrant color (yellow or orange) with thick black outline. "
+    "Add at the BOTTOM the name: \"{NOME}\" — same chunky font style, larger size, vibrant color with black "
+    "outline. Decorate with playful elements (stars, sparkles, hearts) around the corners. Soft cream "
+    "background with warm vibe. Like a polished published children's book cover. NO watermarks. "
+    "Spell text EXACTLY as written, do not invent or alter letters."
+)
+PROMPT_PIXAR_CAPA = (  # legacy, mantido caso algum álbum use o flow antigo
     "Convert this photo into a vibrant 3D Pixar/Disney style colorful cartoon illustration suitable for a "
     "children's book cover. Friendly cute exaggerated features, big expressive eyes, bright vibrant saturated "
     "colors, smooth shading, warm cheerful lighting. "
@@ -533,13 +545,14 @@ def _process_album_background(album_id: int, token: str):
             eh_capa = foto["eh_capa"]
             try:
                 src = Path(foto["original_path"]).read_bytes()
-                prompt = PROMPT_PIXAR_CAPA if eh_capa else PROMPT_COLORIR
-                size = "1024x1024" if eh_capa else "1024x1536"
-                # Capa fica em low (color, OK), miolo em medium (line art precisa precisão)
-                quality = "low" if eh_capa else "medium"
-                processed = _call_openai_edit(src, prompt, size=size, quality=quality)
-                # Vetoriza miolo via potrace pra linhas perfeitas (capa permanece cor original)
-                if not eh_capa:
+                if eh_capa:
+                    # Capa = IA gera tudo (foto + título + nome + decorações), portrait, high quality
+                    nome = (album.get("nome") or "ALBUM DA FAMILIA").upper()
+                    prompt = PROMPT_CAPA_FULL_TEMPLATE.replace("{NOME}", nome)
+                    processed = _call_openai_edit(src, prompt, size="1024x1536", quality="high")
+                else:
+                    # Miolo = line art via gpt-image-2 medium + potrace vetorização
+                    processed = _call_openai_edit(src, PROMPT_COLORIR, size="1024x1536", quality="medium")
                     processed = _vectorize_lineart(processed, target_w=2048)
                 out_path = adir / "processed" / f"{posicao:02d}.png"
                 out_path.write_bytes(processed)
@@ -690,40 +703,48 @@ def _add_border(art: Image.Image, pad: int = 80, border: int = 10, radius: int =
     return framed
 
 
-def _build_capa_page(album: dict, pixar_img: Image.Image) -> Image.Image:
-    """Capa = template estilo + foto Pixar + nome."""
+def _build_capa_page(album: dict, capa_img: Image.Image) -> Image.Image:
+    """Capa = imagem completa gerada pela IA, upscaled + colocada em A4 300 DPI."""
+    # Upscale 2x via LANCZOS (cor com gradiente suave funciona bem)
+    big = capa_img.resize((capa_img.width * 2, capa_img.height * 2), Image.LANCZOS)
+    # Compõe em A4 mantendo aspect ratio, fit no canvas
+    page = Image.new("RGB", A4_PX, "white")
+    aspect = big.width / big.height
+    if A4_PX[0] / A4_PX[1] > aspect:
+        h = A4_PX[1]; w = int(h * aspect)
+    else:
+        w = A4_PX[0]; h = int(w / aspect)
+    fit = big.resize((w, h), Image.LANCZOS)
+    x = (A4_PX[0] - w) // 2
+    y = (A4_PX[1] - h) // 2
+    page.paste(fit, (x, y))
+    return page
+
+# legacy capa builder mantido caso queira fallback (unused agora)
+def _build_capa_page_pillow(album: dict, pixar_img: Image.Image) -> Image.Image:
+    """[LEGACY] Capa via Pillow puro: bg colorido + título + foto + nome."""
     estilo = album.get("capa_estilo") or "familia"
     paletas = {
-        "rosa": ("#FFE5EE", "#FFB6C9", "#7B1F3F"),
-        "azul": ("#E0F0FF", "#A0CFFF", "#1F3F7B"),
-        "familia": ("#FFF4D6", "#FFD37A", "#7B5A1F"),
+        "rosa":    ("#FFE5EE", "#FFB6C9", "#1c1c1c", "#FF4F8F"),
+        "azul":    ("#E0F0FF", "#A0CFFF", "#1c1c1c", "#1CB0F6"),
+        "familia": ("#FFF4D6", "#FFD37A", "#1c1c1c", "#FFB000"),
     }
-    bg, accent, dark = paletas.get(estilo, paletas["familia"])
+    bg, accent, dark, fill_color = paletas.get(estilo, paletas["familia"])
     page = Image.new("RGB", A4_PX, bg)
     d = ImageDraw.Draw(page)
-
-    # Título topo (sem decorações)
-    f_top = _font_bold(80)
+    f_top = _font_bold(96)
     title = "MEU LIVRO PRA COLORIR"
     bbox = d.textbbox((0, 0), title, font=f_top)
-    d.text(((A4_PX[0] - (bbox[2] - bbox[0])) // 2, 600), title, fill=dark, font=f_top)
+    tx = (A4_PX[0] - (bbox[2] - bbox[0])) // 2
+    d.text((tx, 580), title, font=f_top, fill=fill_color, stroke_width=8, stroke_fill=dark)
 
-    # Foto Pixar centralizada (1700x1700) com bordas arredondadas REAIS
+    # Foto Pixar centralizada (1700x1700) — preenche todo o card
     PHOTO_W = 1700
     px = (A4_PX[0] - PHOTO_W) // 2
     py = 950
     PHOTO_RADIUS = 80
 
-    # Frame externo (sombra suave + outline)
-    d.rounded_rectangle(
-        [px - 30, py - 30, px + PHOTO_W + 30, py + PHOTO_W + 30],
-        radius=PHOTO_RADIUS + 20,
-        fill="white",
-        outline=dark,
-        width=6,
-    )
-
-    # Máscara rounded pra clipar a foto
+    # Máscara rounded — foto ocupa todo o card sem margem branca
     mask = Image.new("L", (PHOTO_W, PHOTO_W), 0)
     ImageDraw.Draw(mask).rounded_rectangle(
         [0, 0, PHOTO_W, PHOTO_W], radius=PHOTO_RADIUS, fill=255
@@ -731,12 +752,21 @@ def _build_capa_page(album: dict, pixar_img: Image.Image) -> Image.Image:
     pixar_resized = pixar_img.resize((PHOTO_W, PHOTO_W), Image.LANCZOS)
     page.paste(pixar_resized, (px, py), mask)
 
-    # Nome embaixo
+    # Outline desenhada por cima, exatamente nas bordas da foto
+    d.rounded_rectangle(
+        [px, py, px + PHOTO_W, py + PHOTO_W],
+        radius=PHOTO_RADIUS,
+        outline=dark,
+        width=6,
+    )
+
+    # Nome embaixo — fonte chunky, cor vibrante, borda preta
     nome = (album.get("nome") or "ALBUM DA FAMÍLIA").upper()
-    f_name = _font_bold(140)
+    f_name = _font_bold(160)
     bbox = d.textbbox((0, 0), nome, font=f_name)
-    text_y = py + PHOTO_W + 100
-    d.text(((A4_PX[0] - (bbox[2] - bbox[0])) // 2, text_y), nome, fill=dark, font=f_name)
+    text_y = py + PHOTO_W + 90
+    nx = (A4_PX[0] - (bbox[2] - bbox[0])) // 2
+    d.text((nx, text_y), nome, font=f_name, fill=fill_color, stroke_width=12, stroke_fill=dark)
     return page
 
 
@@ -770,6 +800,8 @@ def _apply_watermark(page: Image.Image, valor: int) -> Image.Image:
 
 def _font_bold(size: int) -> ImageFont.FreeTypeFont:
     paths = [
+        "/app/fonts/Nunito-Black.ttf",                       # Docker (preferida — chunky kids)
+        str(Path(__file__).parent / "fonts" / "Nunito-Black.ttf"),  # local dev
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/Library/Fonts/Arial Bold.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
