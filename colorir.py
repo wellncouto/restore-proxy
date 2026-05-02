@@ -66,8 +66,12 @@ PROMPT_COLORIR = (
     "NO gradients, NO textures, NO dots, NO speckles, NO sketchy strokes. Each line must be solid, "
     "continuous and closed where possible — like a printed coloring book. "
     "Cartoon style with cute exaggerated friendly features, big eyes, simplified shapes (Disney/kawaii feel). "
-    "Center the main subjects in the upper portion. ADD a playful childish background (flowers, butterflies, "
-    "hearts, stars, balloons, clouds, cartoon scenery) filling the rest of the A4 page, also as clean line art. "
+    "BACKGROUND RULE: PRESERVE the actual background from the original photo (trees, beach, room, park, "
+    "house, etc). DO NOT invent generic backgrounds (no flowers/butterflies/balloons unless they exist in "
+    "the original). Stylize the real background as clean cartoon line art — simplify shapes, exaggerate "
+    "characteristics, but KEEP the scene recognizable (if the photo is at a beach, draw waves and sand; "
+    "if at a park, draw the trees/grass/playground; if indoor, draw the room elements like sofa, window). "
+    "Goal: each page tells the story of where the family was. Compose to fill the entire A4 portrait nicely. "
     "Leave generous white space inside shapes for crayons. No text, no signature, no watermark."
 )
 PROMPT_PIXAR_CAPA = (
@@ -319,7 +323,7 @@ def debug():
 def criar_album(body: CriarAlbumIn):
     if body.qtd_fotos not in ALLOWED_PACKS:
         raise HTTPException(400, f"qtd_fotos inválido. Permitidos: {ALLOWED_PACKS}")
-    valor_map = {5: 1990, 10: 2990, 25: 5990}
+    valor_map = {5: 1990, 10: 2900, 25: 5900}
     valor = valor_map[body.qtd_fotos]
 
     with db_conn() as conn:
