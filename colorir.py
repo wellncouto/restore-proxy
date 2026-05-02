@@ -708,19 +708,28 @@ def _build_capa_page(album: dict, pixar_img: Image.Image) -> Image.Image:
     bbox = d.textbbox((0, 0), title, font=f_top)
     d.text(((A4_PX[0] - (bbox[2] - bbox[0])) // 2, 600), title, fill=dark, font=f_top)
 
-    # Foto Pixar centralizada (1700x1700)
+    # Foto Pixar centralizada (1700x1700) com bordas arredondadas REAIS
     PHOTO_W = 1700
     px = (A4_PX[0] - PHOTO_W) // 2
     py = 950
+    PHOTO_RADIUS = 80
+
+    # Frame externo (sombra suave + outline)
     d.rounded_rectangle(
         [px - 30, py - 30, px + PHOTO_W + 30, py + PHOTO_W + 30],
-        radius=60,
+        radius=PHOTO_RADIUS + 20,
         fill="white",
         outline=dark,
-        width=8,
+        width=6,
+    )
+
+    # Máscara rounded pra clipar a foto
+    mask = Image.new("L", (PHOTO_W, PHOTO_W), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [0, 0, PHOTO_W, PHOTO_W], radius=PHOTO_RADIUS, fill=255
     )
     pixar_resized = pixar_img.resize((PHOTO_W, PHOTO_W), Image.LANCZOS)
-    page.paste(pixar_resized, (px, py))
+    page.paste(pixar_resized, (px, py), mask)
 
     # Nome embaixo
     nome = (album.get("nome") or "ALBUM DA FAMÍLIA").upper()
