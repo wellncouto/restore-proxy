@@ -16,8 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Chromium pra renderizar capa via HTML (Playwright)
+RUN playwright install --with-deps chromium
+
 COPY main.py colorir.py ./
 COPY fonts ./fonts
+COPY templates ./templates
 
 # storage persistente pros álbuns (montar volume aqui no Easypanel)
 RUN mkdir -p /data/colorir

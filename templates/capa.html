@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Capa</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: transparent; font-family: 'Fredoka', sans-serif; }
+
+  .cover {
+    --bg-color: {{BG_COLOR}};
+    --frame-border: {{FRAME_COLOR}};
+    --top-text-color: {{TOP_COLOR}};
+    --top-text-stroke: {{TOP_STROKE}};
+    --bottom-text-color: {{BOTTOM_COLOR}};
+    --bottom-text-stroke: {{BOTTOM_STROKE}};
+
+    width: 1240px;
+    height: 1754px;
+    background: var(--bg-color);
+    border-radius: 48px;
+    padding: 80px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    position: relative;
+    box-shadow: 0 16px 64px rgba(0,0,0,0.12);
+    overflow: hidden;
+  }
+
+  .cover-title {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 800;
+    font-size: 130px;
+    line-height: 0.95;
+    text-align: center;
+    text-transform: uppercase;
+    color: var(--top-text-color);
+    -webkit-text-stroke: 8px var(--top-text-stroke);
+    paint-order: stroke fill;
+    letter-spacing: 2px;
+    text-shadow: 0 8px 0 rgba(0,0,0,0.15);
+    word-break: break-word;
+  }
+
+  .photo-frame {
+    flex: 1;
+    border-radius: 40px;
+    border: 12px solid var(--frame-border);
+    overflow: hidden;
+    background: #e8e8e8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 0 4px rgba(255,255,255,0.4);
+  }
+
+  .photo-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .cover-subtitle {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 800;
+    font-size: 112px;
+    line-height: 0.95;
+    text-align: center;
+    text-transform: uppercase;
+    color: var(--bottom-text-color);
+    -webkit-text-stroke: 8px var(--bottom-text-stroke);
+    paint-order: stroke fill;
+    letter-spacing: 2px;
+    text-shadow: 0 8px 0 rgba(0,0,0,0.15);
+    word-break: break-word;
+  }
+</style>
+</head>
+<body>
+<div class="cover" id="cover">
+  <div class="cover-title">{{TOP_TEXT}}</div>
+  <div class="photo-frame"><img src="{{PHOTO_DATA_URL}}" alt=""></div>
+  <div class="cover-subtitle">{{BOTTOM_TEXT}}</div>
+</div>
+</body>
+</html>

@@ -114,6 +114,55 @@ PROMPT_PIXAR_CAPA = (  # legacy, mantido caso algum álbum use o flow antigo
 
 A4_PX = (2480, 3508)  # 300 DPI
 
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Paletas pra capa HTML (estilo Duolingo, infantil)
+CAPA_PALETAS = {
+    "dourado":  {"bg": "#fff8d6", "frame": "#f5b342", "top": "#f5a623", "top_stroke": "#874d00", "bottom": "#4a90e2", "bottom_stroke": "#1e5fa8"},
+    "rosa":     {"bg": "#ffe4e1", "frame": "#e85a6e", "top": "#e85a6e", "top_stroke": "#7a1b2c", "bottom": "#3b82c4", "bottom_stroke": "#0f3d6e"},
+    "azul":     {"bg": "#e0f2ff", "frame": "#3b82c4", "top": "#3b82c4", "top_stroke": "#0f3d6e", "bottom": "#e85a6e", "bottom_stroke": "#7a1b2c"},
+    # alias legado
+    "familia":  {"bg": "#fff8d6", "frame": "#f5b342", "top": "#f5a623", "top_stroke": "#874d00", "bottom": "#4a90e2", "bottom_stroke": "#1e5fa8"},
+    "menina":   {"bg": "#ffe4e1", "frame": "#e85a6e", "top": "#e85a6e", "top_stroke": "#7a1b2c", "bottom": "#3b82c4", "bottom_stroke": "#0f3d6e"},
+    "menino":   {"bg": "#e0f2ff", "frame": "#3b82c4", "top": "#3b82c4", "top_stroke": "#0f3d6e", "bottom": "#e85a6e", "bottom_stroke": "#7a1b2c"},
+}
+
+
+def _render_capa_html(album: dict, foto_path: str) -> bytes:
+    """Renderiza HTML da capa via Playwright. Retorna PNG bytes."""
+    from playwright.sync_api import sync_playwright
+
+    estilo = (album.get("capa_estilo") or "dourado").lower()
+    p = CAPA_PALETAS.get(estilo, CAPA_PALETAS["dourado"])
+    nome = (album.get("nome") or "Família").strip()
+
+    foto_b64 = base64.b64encode(Path(foto_path).read_bytes()).decode()
+    photo_data_url = f"data:image/jpeg;base64,{foto_b64}"
+
+    template = (TEMPLATES_DIR / "capa.html").read_text(encoding="utf-8")
+    html = (template
+        .replace("{{BG_COLOR}}", p["bg"])
+        .replace("{{FRAME_COLOR}}", p["frame"])
+        .replace("{{TOP_COLOR}}", p["top"])
+        .replace("{{TOP_STROKE}}", p["top_stroke"])
+        .replace("{{BOTTOM_COLOR}}", p["bottom"])
+        .replace("{{BOTTOM_STROKE}}", p["bottom_stroke"])
+        .replace("{{TOP_TEXT}}", "Meu Livro pra Colorir")
+        .replace("{{BOTTOM_TEXT}}", nome)
+        .replace("{{PHOTO_DATA_URL}}", photo_data_url)
+    )
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        ctx = browser.new_context(viewport={"width": 1400, "height": 2000}, device_scale_factor=2)
+        page = ctx.new_page()
+        page.set_content(html, wait_until="networkidle")
+        page.wait_for_timeout(800)  # garante font render
+        cover_el = page.locator(".cover")
+        png = cover_el.screenshot(omit_background=False)
+        browser.close()
+    return png
+
 
 # ───────── Helpers ─────────
 
@@ -560,10 +609,8 @@ def _process_album_background(album_id: int, token: str):
             try:
                 src = Path(foto["original_path"]).read_bytes()
                 if eh_capa:
-                    # Capa = IA gera tudo (foto + título + nome + decorações), portrait, high quality
-                    nome = (album.get("nome") or "ALBUM DA FAMILIA").upper()
-                    prompt = PROMPT_CAPA_FULL_TEMPLATE.replace("{NOME}", nome)
-                    processed = _call_openai_edit(src, prompt, size="1024x1536", quality="high")
+                    # Capa = HTML template via Playwright (sem IA, sem moderation_block)
+                    processed = _render_capa_html(album, foto["original_path"])
                 else:
                     # Miolo = line art via gpt-image-2 medium + potrace vetorização
                     processed = _call_openai_edit(src, PROMPT_COLORIR, size="1024x1536", quality="medium")
