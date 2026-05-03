@@ -49,6 +49,8 @@ PIX_CHAVE = os.getenv("COLORIR_PIX_CHAVE", "e58e968f-2c38-43a4-b094-5ecf0eefd21a
 WHATSAPP_NUM = os.getenv("COLORIR_WHATSAPP_NUM", "554735132596")
 PREVIEW_WEBHOOK = os.getenv("COLORIR_PREVIEW_WEBHOOK",
     "http://empresarial_n8n:5678/webhook/colorir-preview-ready")
+UPLOAD_WEBHOOK = os.getenv("COLORIR_UPLOAD_WEBHOOK",
+    "http://empresarial_n8n:5678/webhook/colorir-upload-recebido")
 
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
 OPENAI_MODEL = "gpt-image-2"
@@ -921,6 +923,16 @@ def processar_album(token: str, body: ProcessarAlbumIn, bg: BackgroundTasks):
             cur.execute(f"UPDATE colorir.albuns SET {', '.join(updates)} WHERE id=%s", params)
 
     _record_event(album["id"], album["phone"], "CLICOU_ENVIAR", {"qtd": n})
+    if UPLOAD_WEBHOOK:
+        try:
+            with httpx.Client(timeout=10.0) as cli:
+                cli.post(UPLOAD_WEBHOOK, json={
+                    "phone": album["phone"],
+                    "token": token,
+                    "qtd": n,
+                })
+        except Exception as e:
+            log.warning(f"[{token}] upload webhook falhou: {e}")
     bg.add_task(_process_album_background, album["id"], token)
     return {"ok": True, "status": "PROCESSANDO", "fotos": n}
 
