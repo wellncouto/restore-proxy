@@ -354,7 +354,7 @@ def debug():
 def criar_album(body: CriarAlbumIn):
     if body.qtd_fotos not in ALLOWED_PACKS:
         raise HTTPException(400, f"qtd_fotos inválido. Permitidos: {ALLOWED_PACKS}")
-    valor_map = {5: 1990, 10: 2900, 25: 5900}
+    valor_map = {5: 1990, 10: 1500, 25: 5900}
     valor = valor_map[body.qtd_fotos]
 
     with db_conn() as conn:
