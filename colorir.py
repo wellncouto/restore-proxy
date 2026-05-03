@@ -46,7 +46,7 @@ TOKEN_SECRET = os.getenv("COLORIR_TOKEN_SECRET", "change-me-in-prod")
 OPENAI_KEY = os.getenv("COLORIR_OPENAI_KEY", os.getenv("OPENAI_API_KEY", ""))
 BASE_URL = os.getenv("COLORIR_BASE_URL", "https://colorir.example.com")
 PIX_CHAVE = os.getenv("COLORIR_PIX_CHAVE", "e58e968f-2c38-43a4-b094-5ecf0eefd21a")
-WHATSAPP_NUM = os.getenv("COLORIR_WHATSAPP_NUM", "5547991100824")
+WHATSAPP_NUM = os.getenv("COLORIR_WHATSAPP_NUM", "554735132596")
 PREVIEW_WEBHOOK = os.getenv("COLORIR_PREVIEW_WEBHOOK",
     "http://empresarial_n8n:5678/webhook/colorir-preview-ready")
 
@@ -1014,6 +1014,20 @@ def get_pdf_final(token: str):
     if not row or row["status"] != "PAGO":
         raise HTTPException(403, "álbum não pago")
     return FileResponse(row["pdf_final_url"], media_type="application/pdf", filename="album.pdf")
+
+
+@router.get("/album/{token}/pdf-preview")
+def get_pdf_preview(token: str):
+    """PDF com marca d'água — disponível assim que o preview fica pronto."""
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT pdf_preview_url, status FROM colorir.albuns WHERE token=%s", (token,)
+            )
+            row = cur.fetchone()
+    if not row or not row["pdf_preview_url"] or row["status"] not in ("PREVIEW", "PAGO"):
+        raise HTTPException(404, "preview não disponível")
+    return FileResponse(row["pdf_preview_url"], media_type="application/pdf", filename="preview.pdf")
 
 
 @router.get("/exemplo/{kind}")
