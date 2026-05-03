@@ -1006,6 +1006,42 @@ def get_preview_image(token: str):
     return Response(content=buf.getvalue(), media_type="image/jpeg")
 
 
+@router.get("/album/{token}/pagina/{posicao}")
+def get_pagina(token: str, posicao: int):
+    """Retorna PNG/JPEG de uma página específica (0=capa, 1+=miolos) com marca d'água."""
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM colorir.albuns WHERE token=%s", (token,))
+            album = cur.fetchone()
+            if not album or album["status"] not in ("PREVIEW", "PAGO"):
+                raise HTTPException(404, "preview não disponível")
+            cur.execute(
+                "SELECT * FROM colorir.fotos WHERE album_id=%s AND posicao=%s AND status='OK' LIMIT 1",
+                (album["id"], posicao),
+            )
+            foto = cur.fetchone()
+    if not foto or not foto["processada_path"]:
+        raise HTTPException(404, "página não encontrada")
+
+    img = Image.open(foto["processada_path"]).convert("RGB")
+    if foto["eh_capa"]:
+        page = _build_capa_page(album, img)
+    else:
+        page = _build_miolo_page(img, with_border=True)
+    page = _apply_watermark(page, valor=album["valor_centavos"])
+
+    # Tamanho menor pra page-flip carregar rápido
+    if page.width > 900:
+        ratio = 900 / page.width
+        page = page.resize((900, int(page.height * ratio)), Image.LANCZOS)
+
+    buf = io.BytesIO()
+    page.save(buf, "JPEG", quality=82, optimize=True)
+    buf.seek(0)
+    from fastapi.responses import Response
+    return Response(content=buf.getvalue(), media_type="image/jpeg")
+
+
 @router.post("/album/{token}/liberar")
 def liberar_album(token: str, body: LiberarIn):
     """Chamado pelo n8n após PIX validado. Move pra histórico, deleta originais."""
