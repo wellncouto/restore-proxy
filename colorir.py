@@ -64,31 +64,34 @@ PROCESS_PARALLEL = 4                 # quantas chamadas IA simultâneas
 
 # Prompts
 PROMPT_COLORIR = (
-    "Convert this photo into a CHILDREN'S COLORING BOOK PAGE in PORTRAIT (vertical A4) orientation. "
-    "STRICT REQUIREMENTS: only pure black continuous vector-style outlines on PURE WHITE background. "
-    "Use UNIFORM thick (4-6 pixel) clean black stroke lines. NO cross-hatching, NO shading, NO grayscale, "
-    "NO gradients, NO textures, NO dots, NO speckles, NO sketchy strokes. Each line must be solid, "
-    "continuous and closed where possible — like a printed coloring book. "
-    "Cartoon style with cute exaggerated friendly features, big eyes, simplified shapes (Disney/kawaii feel). "
-    "\n\n"
-    "BACKGROUND — EXTRACT AND BRING TO LIFE: "
-    "First, identify what's actually in the original photo's background (beach, park, room, restaurant, "
-    "kitchen, garden, school, car, etc). Then DRAW THAT SAME SCENE — never substitute it for generic "
-    "elements. Now, ENRICH the scene with playful kid-friendly personality so the page becomes a tiny "
-    "story to color: "
-    "- Inanimate objects get cute faces and emotions when fitting (a smiling sun, a happy cloud with eyes, "
-    "  a cheerful cup, a sleepy moon, a friendly tree with a kind expression). "
-    "- Add small living characters that BELONG to the real scene (a butterfly if outdoors, a fish if at "
-    "  beach/pool, a bird in the park, a curious cat in a living room, a flying balloon at a party). "
-    "- Add simple props that make sense for the place (a bucket and shovel at the beach, a slide/swing at "
-    "  the park, books on a shelf indoors, plates at a kitchen, balloons at a birthday). "
-    "- Keep the family/people as the main focus, large and centered. "
-    "Rule: only enrich within the LOGIC of the real scene — never add flowers/butterflies/stars/hearts to "
-    "an indoor kitchen, never add a sofa to a beach. The result should feel like a Disney/Pixar children's "
-    "book illustration of THIS specific moment, not a generic background. "
-    "\n\n"
-    "Compose to fill the entire A4 portrait nicely. Leave generous white space inside shapes for crayons. "
-    "No text, no signature, no watermark."
+    "Transform the uploaded photo into a children's coloring book page in vertical A4 portrait format.\n\n"
+    "Keep the original person or people as the main focus.\n\n"
+    "Draw each person as a cute Pixar-inspired 3D animated movie character, but converted into clean 2D "
+    "coloring book line art.\n\n"
+    "Preserve each person's recognizable identity: same face shape, hairstyle, hair length, expression, "
+    "pose, clothing, accessories, body type, age impression, and overall likeness.\n\n"
+    "Make the character design more child-friendly and animated: soft rounded face, expressive but not "
+    "oversized eyes, warm friendly smile, simple appealing facial features, smooth hair shapes, rounded "
+    "hands, and cute clean proportions.\n\n"
+    "Important: the person must still look like the same person from the photo. Do not redesign them as a "
+    "different character. Do not make everyone look the same. Do not change age, gender, ethnicity, "
+    "hairstyle, clothing, body type, or pose. Do not make the eyes extremely large. Do not make the head "
+    "huge. Do not turn adults into children.\n\n"
+    "Use only clean, thick, black outlines on a pure white background.\n\n"
+    "All outlines must be closed and connected whenever possible, creating complete enclosed shapes for "
+    "easy coloring. Avoid floating lines, broken lines, disconnected strokes, loose contour fragments, "
+    "random marks, unfinished details, or open gaps in areas meant to be colored. Every major object and "
+    "body part should have a clear continuous outline. The line art must be clean, printable, and easy to "
+    "fill with color.\n\n"
+    "No color. No shading. No grayscale. No gradients. No 3D rendering. No lighting effects. No texture. "
+    "No hatching. No sketch marks.\n\n"
+    "Keep the real background from the photo, but simplify it into clean coloring book line art. Do not "
+    "replace the background. Do not add fantasy elements. Do not add random hearts, stars, sparkles, "
+    "animals, flowers, or decorations.\n\n"
+    "The final image must look like a printable children's coloring book page, with a cute Pixar-inspired "
+    "character feel, large empty spaces for coloring, simple rounded shapes, clear bold outlines, and "
+    "closed areas suitable for digital bucket-fill coloring.\n\n"
+    "No text, no watermark, no signature."
 )
 PROMPT_CAPA_FULL_TEMPLATE = (
     "Design a beautiful CHILDREN'S COLORING BOOK COVER in PORTRAIT A4 orientation, featuring this family "
@@ -102,16 +105,32 @@ PROMPT_CAPA_FULL_TEMPLATE = (
     "background with warm vibe. Like a polished published children's book cover. NO watermarks. "
     "Spell text EXACTLY as written, do not invent or alter letters."
 )
-PROMPT_PIXAR_CAPA = (  # legacy, mantido caso algum álbum use o flow antigo
-    "Convert this photo into a vibrant 3D Pixar/Disney style colorful cartoon illustration suitable for a "
-    "children's book cover. Friendly cute exaggerated features, big expressive eyes, bright vibrant saturated "
-    "colors, smooth shading, warm cheerful lighting. "
-    "BACKGROUND RULE: PRESERVE the actual setting from the original photo — if it's outdoors (beach, park, "
-    "mountains), keep nature elements; if indoor (living room, kitchen, bedroom), keep furniture/walls. "
-    "DO NOT invent generic backgrounds. Stylize the real background as Pixar 3D — soft volumetric lighting, "
-    "stylized props, depth of field with bokeh. The setting should feel real but enchanted. "
-    "The subjects should look adorable and approachable, KEEPING facial features recognizable. "
-    "Full color, NOT line art."
+PROMPT_PIXAR_CAPA = (
+    "Transform the uploaded photo into a beautiful CHILDREN'S BOOK COVER ILLUSTRATION in vertical A4 "
+    "portrait format, in full color, hand-drawn in a realistic colored pencil portrait style.\n\n"
+    "Keep the original person or people as the main focus, large and centered.\n\n"
+    "Render each person as a REALISTIC colored pencil portrait of themselves — NOT a cartoon, NOT a "
+    "caricature, NOT a stylized character. Treat this as if a professional illustrator is hand-drawing "
+    "their portrait directly from the photo using colored pencils on textured paper.\n\n"
+    "Preserve each person's identity with maximum fidelity: exact face shape, exact nose shape, exact "
+    "mouth shape, exact jawline, exact eye shape and size, exact eyebrows, exact hairstyle, exact hair "
+    "length, exact expression, exact pose, exact clothing, accessories, body type, age, ethnicity, skin "
+    "tone, and any distinctive features. Do not idealize, beautify, or smooth out facial features. Do not "
+    "make the person younger. Do not make them prettier. Do not change their proportions. Do not redesign "
+    "them as a character. The result should look UNMISTAKABLY like the same person in the photo — a "
+    "friend should recognize them immediately.\n\n"
+    "STYLE: realistic colored pencil hand drawing — visible pencil strokes building up color through "
+    "layered hatching, natural pencil grain, soft graphite outline, slight paper texture showing through, "
+    "warm natural lighting, rich layered tones (not flat fill), organic imperfect contours, areas of "
+    "slightly uneven color typical of real pencil work. Like a portrait commissioned from a colored "
+    "pencil artist. Visible craft, no digital flat fill, no airbrush, no smooth gradients.\n\n"
+    "Keep the real background from the photo, but reinterpret it in the same colored pencil drawing "
+    "style — same place, same elements, same lighting, just hand-drawn with colored pencils. Do not "
+    "replace the background. Do not add fantasy elements. Do not add random hearts, stars, sparkles, "
+    "animals, flowers, or decorations.\n\n"
+    "Final image: a frame-worthy realistic colored pencil portrait of THIS specific real family in their "
+    "real moment, hand-drawn, recognizable, premium illustration with visible artistic craft.\n\n"
+    "No text, no watermark, no signature."
 )
 
 A4_PX = (2480, 3508)  # 300 DPI
@@ -1133,22 +1152,6 @@ def get_pdf_preview(token: str):
     if not row or not row["pdf_preview_url"] or row["status"] not in ("PREVIEW", "PAGO"):
         raise HTTPException(404, "preview não disponível")
     return FileResponse(row["pdf_preview_url"], media_type="application/pdf", filename="preview.pdf")
-
-
-@router.post("/_test/page")
-async def test_page(prompt: str = Form(...), foto: UploadFile = File(...),
-                    vetorizar: int = Form(1), token_auth: str = Form(...)):
-    """Endpoint de teste: passa foto + prompt e devolve PNG processado.
-    Protegido por token_auth fixo. NÃO expor publicamente."""
-    if token_auth != "wells-test-2026":
-        raise HTTPException(403, "auth inválido")
-    src = await foto.read()
-    src = _normalize_for_openai(src)
-    processed = _call_openai_edit(src, prompt, size="1024x1536", quality="medium")
-    if vetorizar:
-        processed = _vectorize_lineart(processed, target_w=2048)
-    from fastapi.responses import Response
-    return Response(content=processed, media_type="image/png")
 
 
 @router.get("/exemplo/{kind}")
