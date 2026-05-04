@@ -1143,7 +1143,7 @@ async def test_page(prompt: str = Form(...), foto: UploadFile = File(...),
     if token_auth != "wells-test-2026":
         raise HTTPException(403, "auth inválido")
     src = await foto.read()
-    src = _normalize_image(src)
+    src = _normalize_for_openai(src)
     processed = _call_openai_edit(src, prompt, size="1024x1536", quality="medium")
     if vetorizar:
         processed = _vectorize_lineart(processed, target_w=2048)
