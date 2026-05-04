@@ -634,7 +634,7 @@ def _process_album_background(album_id: int, token: str):
                     # Tenta IA com prompt SEGURO (só estilização, sem cena/textos), fallback foto original
                     foto_pra_capa = foto["original_path"]
                     try:
-                        stylized = _call_openai_edit(src, PROMPT_PIXAR_CAPA, size="1024x1024", quality="medium")
+                        stylized = _call_openai_edit(src, PROMPT_PIXAR_CAPA, size="1024x1536", quality="medium")
                         stylized_path = adir / "processed" / f"{posicao:02d}_pixar.png"
                         stylized_path.parent.mkdir(parents=True, exist_ok=True)
                         stylized_path.write_bytes(stylized)
