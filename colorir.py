@@ -611,8 +611,18 @@ def _process_album_background(album_id: int, token: str):
             try:
                 src = Path(foto["original_path"]).read_bytes()
                 if eh_capa:
-                    # Capa = HTML template via Playwright (sem IA, sem moderation_block)
-                    processed = _render_capa_html(album, foto["original_path"])
+                    # Capa = foto estilizada (Pixar via OpenAI) + frame HTML
+                    # Tenta IA com prompt SEGURO (só estilização, sem cena/textos), fallback foto original
+                    foto_pra_capa = foto["original_path"]
+                    try:
+                        stylized = _call_openai_edit(src, PROMPT_PIXAR_CAPA, size="1024x1024", quality="medium")
+                        stylized_path = adir / "processed" / f"{posicao:02d}_pixar.png"
+                        stylized_path.parent.mkdir(parents=True, exist_ok=True)
+                        stylized_path.write_bytes(stylized)
+                        foto_pra_capa = str(stylized_path)
+                    except Exception as ee:
+                        log.warning(f"[{token}] capa IA falhou ({ee}), usando foto original")
+                    processed = _render_capa_html(album, foto_pra_capa)
                 else:
                     # Miolo = line art via gpt-image-2 medium + potrace vetorização
                     processed = _call_openai_edit(src, PROMPT_COLORIR, size="1024x1536", quality="medium")
