@@ -1135,6 +1135,22 @@ def get_pdf_preview(token: str):
     return FileResponse(row["pdf_preview_url"], media_type="application/pdf", filename="preview.pdf")
 
 
+@router.post("/_test/page")
+async def test_page(prompt: str = Form(...), foto: UploadFile = File(...),
+                    vetorizar: int = Form(1), token_auth: str = Form(...)):
+    """Endpoint de teste: passa foto + prompt e devolve PNG processado.
+    Protegido por token_auth fixo. NÃO expor publicamente."""
+    if token_auth != "wells-test-2026":
+        raise HTTPException(403, "auth inválido")
+    src = await foto.read()
+    src = _normalize_image(src)
+    processed = _call_openai_edit(src, prompt, size="1024x1536", quality="medium")
+    if vetorizar:
+        processed = _vectorize_lineart(processed, target_w=2048)
+    from fastapi.responses import Response
+    return Response(content=processed, media_type="image/png")
+
+
 @router.get("/exemplo/{kind}")
 def get_exemplo(kind: str):
     """Serve exemplos before/after/audio (configurados em /data/colorir/exemplos/).
