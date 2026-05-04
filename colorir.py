@@ -1156,16 +1156,31 @@ def get_pdf_preview(token: str):
 
 @router.get("/exemplo/{kind}")
 def get_exemplo(kind: str):
-    """Serve exemplos before/after/audio (configurados em /data/colorir/exemplos/).
-    kind: 'antes' | 'depois' | 'audio'"""
-    safe = {"antes": "antes.jpg", "depois": "depois.jpg", "audio": "intro.mp3"}
+    """Serve exemplos before/after/audio/pdf (configurados em /data/colorir/exemplos/).
+    kind: 'antes' | 'depois' | 'audio' | 'pdf'"""
+    safe = {"antes": "antes.jpg", "depois": "depois.jpg", "audio": "intro.mp3", "pdf": "album.pdf"}
     if kind not in safe:
         raise HTTPException(404, "kind inválido")
     p = STORAGE_ROOT / "exemplos" / safe[kind]
     if not p.exists():
         raise HTTPException(404, "arquivo não disponível")
-    media = "image/jpeg" if kind != "audio" else "audio/mpeg"
+    media = {"audio": "audio/mpeg", "pdf": "application/pdf"}.get(kind, "image/jpeg")
     return FileResponse(p, media_type=media)
+
+
+@router.post("/_admin/upload-exemplo")
+async def upload_exemplo(kind: str = Form(...), arquivo: UploadFile = File(...), token_auth: str = Form(...)):
+    """Upload de arquivos de exemplo (auth fixo)."""
+    if token_auth != "wells-test-2026":
+        raise HTTPException(403, "auth inválido")
+    safe = {"antes": "antes.jpg", "depois": "depois.jpg", "audio": "intro.mp3", "pdf": "album.pdf"}
+    if kind not in safe:
+        raise HTTPException(400, "kind inválido")
+    target = STORAGE_ROOT / "exemplos" / safe[kind]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    data = await arquivo.read()
+    target.write_bytes(data)
+    return {"ok": True, "saved": str(target), "size": len(data)}
 
 
 @router.get("/historico/{phone}")
